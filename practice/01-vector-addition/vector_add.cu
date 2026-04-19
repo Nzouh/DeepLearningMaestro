@@ -1,6 +1,8 @@
 #include <cmath>
+#include <device_launch_parameters.h>
 #include <iostream>
 #include <vector>
+#include <chrono>
 
 /**
  * PROBLEM: Vector Addition (C = A + B)
@@ -10,11 +12,20 @@
  * Reference:
  * https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#kernels
  */
+__global__ void vectorAdd(float *A, float *B, float *C, int n) {
+  int i = (blockDim.x * blockIdx.x) + threadIdx.x;
+  if(i < n){
+    C[i] = A[i] + B[i];
+  }
+}
 
 // TODO: Write your kernel here
 // __global__ void vectorAdd(...) { ... }
 
 int main() {
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
   // Total number of elements
   const int N = 1 << 20; // 1,048,576 elements
   const size_t bytes = N * sizeof(float);
@@ -38,6 +49,31 @@ int main() {
   // cudaMalloc(&d_A, ...);
   // ...
 
+  cudaError error1 = cudaMalloc ((void**) &d_A, bytes);
+  if(error1 != cudaSuccess){
+    printf("CUDA Malloc failed: %s \n ", cudaGetErrorString(error1));
+    return 1;
+  }
+
+  cudaError error2 = cudaMalloc ((void**) &d_B, bytes);
+
+  if(error2 != cudaSuccess){
+    printf("CUDA Malloc failed: %s \n ", cudaGetErrorString(error2));
+    cudaFree(d_A);
+    return 1;
+
+  }
+
+  cudaError error3 = cudaMalloc((void**) &d_C, bytes);
+
+  if(error3 != cudaSuccess){
+    printf("CUDA Malloc failed: %s \n ", cudaGetErrorString(error3));
+    cudaFree(d_A);
+    cudaFree(d_B);
+    return 1;
+  }
+
+
   /**
    * STAGE 2: Copy Data to GPU
    * TODO: Copy h_A and h_B from the CPU to the GPU.
@@ -46,6 +82,9 @@ int main() {
    */
   // cudaMemcpy(d_A, h_A.data(), ...);
   // ...
+
+  cudaMemcpy(d_A, h_A.data(), bytes, cudaMemcpyHostToDevice);
+  cudaMemcpy(d_B, h_B.data(), bytes, cudaMemcpyHostToDevice);
 
   /**
    * STAGE 3: Kernel Execution
@@ -58,12 +97,17 @@ int main() {
   int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
 
   // vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(...);
+  cudaEventRecord(start);
+  vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+  cudaEventRecord(stop);
 
   /**
    * STAGE 4: Copy Results Back
    * TODO: Copy the resulting d_C from the GPU back to h_C on the CPU.
    */
   // cudaMemcpy(h_C.data(), d_C, ...);
+
+  cudaMemcpy(h_C.data(), d_C, bytes, cudaMemcpyDeviceToHost);
 
   // STAGE 5: Verification (Synapse)
   std::cout << "Verifying results..." << std::endl;
@@ -88,6 +132,31 @@ int main() {
    */
   // cudaFree(d_A);
   // ...
+
+  cudaFree(d_A);
+  cudaFree(d_B);
+  cudaFree(d_C);
+  cudaEventSynchronize(stop);
+  float milliseconds = 0; 
+  cudaEventElapsedTime(&milliseconds, start, stop);
+  printf("The time it took for gpu: %f ms\n", milliseconds);
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+
+  //we can also measure the time it takes for CPU:
+
+  std::vector<float> h_C_cpu(N);
+  auto cpu_start = std::chrono::high_resolution_clock::now();
+  for(int i = 0; i < N; i ++){
+    h_C_cpu[i] = h_A[i] + h_B[i];
+  }
+
+  auto cpu_end = std::chrono::high_resolution_clock::now();
+
+  std::chrono::duration<float, std::milli> duration = cpu_end - cpu_start;
+  float cpu_time = duration.count();
+    printf("The time it took for cpu: %f ms\n", cpu_time);
+
 
   return 0;
 }
