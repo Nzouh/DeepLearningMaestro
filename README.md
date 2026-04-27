@@ -69,4 +69,8 @@ In an era of LLM-generated code, this repository serves as a sanctuary for manua
 
 ---
 
+My model's accuracy:
+<img width="543" height="115" alt="image" src="https://github.com/user-attachments/assets/e1aafea6-cb2e-4456-8673-da3d9bf8115c" />
+Not bad, right? 
+
 *"What I cannot create, I do not understand." — Richard Feynman*
